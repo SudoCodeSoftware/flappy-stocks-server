@@ -65,10 +65,22 @@ socket.on('error', (err) => {
 
 socket.on('message', (msg, rinfo) => {
 	var id = msg.readDoubleBE(0);
+	var key = msg.readDoubleBE(8);
 	console.log(`server got: ${id} from ${rinfo.address}:${rinfo.port}`);
 	//console.log("Server got %d from ${rinfo.address}:${rinfo.port}", msg);
-	clients.push({address: rinfo.address, port: rinfo.port});
-	setInterval(sendNextPrice, 100);
+
+	//if the client hasn't already been added
+	var clientNew = true;
+	for (var i = 0; i < clients.length; i++) {
+		if (clients[i].address == rinfo.address) {
+			clientNew = false;
+			break;
+		}
+	}
+
+	if (clientNew) {
+		clients.push({address: rinfo.address, port: rinfo.port});
+	}
 /*
 	var myobj = {
 		ip: "Company Inc",
@@ -84,6 +96,7 @@ socket.on('listening', () => {
 	const address = socket.address();
 	socket.setBroadcast(true);
 	console.log(`server listening ${address.address}:${address.port}`);
+	setInterval(sendNextPrice, 100);
 });
 
 socket.bind(5149);
