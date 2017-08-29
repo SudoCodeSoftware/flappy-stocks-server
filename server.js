@@ -35,6 +35,15 @@ function sendNextPrice() {
 	currentDataIndex = (currentDataIndex + 1) % testDataSize;
 }
 
+function checkClientStatus() {
+	for (var i = 0; i < clients.length; i++) {
+		if (new Date().getTime() - clients[i].lastContact > 5000) {
+			clients.splice(i, 1);		//Remove the client
+			break;
+		}
+	}
+}
+
 var mongoClient = require('mongodb').MongoClient;
 var dbURL = "mongodb://localhost:27017/mydb";
 
@@ -74,12 +83,13 @@ socket.on('message', (msg, rinfo) => {
 	for (var i = 0; i < clients.length; i++) {
 		if (clients[i].address == rinfo.address) {
 			clientNew = false;
+			clients[i].lastContact = new Date().getTime();
 			break;
 		}
 	}
 
 	if (clientNew) {
-		clients.push({address: rinfo.address, port: rinfo.port});
+		clients.push({address: rinfo.address, port: rinfo.port, lastContact: new Date().getTime()});
 	}
 /*
 	var myobj = {
@@ -97,6 +107,7 @@ socket.on('listening', () => {
 	socket.setBroadcast(true);
 	console.log(`server listening ${address.address}:${address.port}`);
 	setInterval(sendNextPrice, 100);
+	setInterval(checkClientStatus, 1000);
 });
 
 socket.bind(5149);
