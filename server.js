@@ -51,12 +51,16 @@ const dgram = require('dgram');
 const socket = dgram.createSocket('udp4');
 
 function initDatabase(database) {
+	//Delete this once we want data persistence
+	database.collection("users").drop(function(err, delOK) {
+	  if (err) throw err;
+	  if (delOK) console.log("Collection deleted");
+	});
+
 	database.createCollection("users", function(err, res) {
 		if (err) throw err;
 		console.log("Table created!");
 	});
-
-
 }
 
 var database;
@@ -91,15 +95,35 @@ socket.on('message', (msg, rinfo) => {
 	if (clientNew) {
 		clients.push({address: rinfo.address, port: rinfo.port, lastContact: new Date().getTime()});
 	}
-/*
+
 	var myobj = {
-		ip: "Company Inc",
-		address: "Highway 37"
+		address: rinfo.address,
+		port: rinfo.port,
+		lastContact: new Date().getTime()
 	};
-	database.collection("users").insertOne(myobj, function(err, res) {
-	  if (err) throw err;
-	  console.log("1 record inserted");
-	});*/
+
+	database.collection("users").findOne({address: rinfo.address},
+		function(err, result) {
+			if (err) throw err;
+
+			if (result === null) {
+				database.collection("users").insertOne(myobj, function(err, res) {
+				  if (err) throw err;
+				  console.log("1 record inserted");
+				});
+			}
+
+			console.log("Found:", result);
+		});
+
+
+		//Output collection for debugging
+		database.collection("users").find({address: rinfo.address}).toArray(function(err, result) {
+    	if (err) throw err;
+			console.log("\n\n\n-------------\n\n\n")
+			console.log(result);
+			console.log("\n\n\n-------------\n\n\n")
+  	});
 });
 
 socket.on('listening', () => {
