@@ -23,25 +23,26 @@ function sendNextPrice() {
 	const buf = Buffer.allocUnsafe(8);
 
 	buf.writeDoubleBE(testData[currentDataIndex], 0);
-
-	for (var clientI = 0; clientI < clients.length; clientI++) {
-		socket.send([buf], clients[clientI].port, clients[clientI].address, (err) => {
-			if (err != null) {
-				console.log("ERROR:", err);
-			}
-		});
-	}
+	//Go through all users
+	database.collection("users").find({}).toArray(function(err, clientList) {
+		if (err) throw err;
+		for (var i = 0; i < clientList.length; i++) {
+			socket.send([buf], clientList[i].port, clientList[i].address, (err) => {
+				if (err != null) {
+					console.log("ERROR:", err);
+				}
+			});
+		}
+	});
 
 	currentDataIndex = (currentDataIndex + 1) % testDataSize;
 }
 
 function checkClientStatus() {
-	for (var i = 0; i < clients.length; i++) {
-		if (new Date().getTime() - clients[i].lastContact > 5000) {
-			clients.splice(i, 1);		//Remove the client
-			break;
-		}
-	}
+	database.collection("users").deleteMany({lastContact: {$lt: new Date().getTime() - 5000}}, function(err, obj) {
+    	if (err) throw err;
+    	console.log(obj.result.n + " users deleted");
+  });
 }
 
 var mongoClient = require('mongodb').MongoClient;
@@ -52,14 +53,18 @@ const socket = dgram.createSocket('udp4');
 
 function initDatabase(database) {
 	//Delete this once we want data persistence
-	database.collection("users").drop(function(err, delOK) {
-	  if (err) throw err;
-	  if (delOK) console.log("Collection deleted");
-	});
 
 	database.createCollection("users", function(err, res) {
 		if (err) throw err;
-		console.log("Table created!");
+		//Delete this once we want data persistence
+		//If I try dropping a non-existant database, it has a fit
+		//so the easiest way to fix it is to just create it.
+		database.collection("users").drop(function(err, delOK) {
+		  if (err) throw err;
+			database.createCollection("users", function(err, res) {
+				if (err) throw err;
+			});
+		});
 	});
 }
 
@@ -82,28 +87,14 @@ socket.on('message', (msg, rinfo) => {
 	console.log(`server got: ${id} from ${rinfo.address}:${rinfo.port}`);
 	//console.log("Server got %d from ${rinfo.address}:${rinfo.port}", msg);
 
-	//if the client hasn't already been added
-	var clientNew = true;
-	for (var i = 0; i < clients.length; i++) {
-		if (clients[i].address == rinfo.address) {
-			clientNew = false;
-			clients[i].lastContact = new Date().getTime();
-			break;
-		}
-	}
-
-	if (clientNew) {
-		clients.push({address: rinfo.address, port: rinfo.port, lastContact: new Date().getTime()});
-	}
-
-	var myobj = {
+	var newClientObj = {
 		address: rinfo.address,
 		port: rinfo.port,
 		lastContact: new Date().getTime()
 	};
 
-	database.collection("users").findOne({address: rinfo.address},
-		function(err, result) {
+	database.collection("users").update({address: rinfo.address}, newClientObj, {
+		callback: function(err, result) {
 			if (err) throw err;
 
 			if (result === null) {
@@ -112,18 +103,24 @@ socket.on('message', (msg, rinfo) => {
 				  console.log("1 record inserted");
 				});
 			}
+			else {
+				console.log("ELAPSED TIME: " + (new Date().getTime() - result.lastContact));
+				result.lastContact = new Date().getTime();
+				console.log("NEW ELAPSED TIME: " + (new Date().getTime() - result.lastContact));
+			}
 
 			console.log("Found:", result);
-		});
+		},
+		upsert: true});
 
-
+/*
 		//Output collection for debugging
-		database.collection("users").find({address: rinfo.address}).toArray(function(err, result) {
+		database.collection("users").find({}).toArray(function(err, result) {
     	if (err) throw err;
 			console.log("\n\n\n-------------\n\n\n")
 			console.log(result);
 			console.log("\n\n\n-------------\n\n\n")
-  	});
+  	});*/
 });
 
 socket.on('listening', () => {
